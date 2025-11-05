@@ -128,6 +128,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Roadmap
 
+- [ ] Web interface for online conversion (GitHub Pages + backend API)
 - [ ] Word to LaTeX conversion
 - [ ] Word to Markdown conversion
 - [ ] Support for more LaTeX packages and environments
