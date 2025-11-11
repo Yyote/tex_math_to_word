@@ -6,11 +6,15 @@ Convert LaTeX `.tex` and Markdown `.md` files to Microsoft Word documents (`.doc
 
 - 📄 **Multiple input formats**: Convert both LaTeX (`.tex`) and Markdown (`.md`) files
 - ✨ **Automatic equation conversion**: LaTeX equations → native Word equations (OMML)
-- 📄 **Full document support**: Handles sections, subsections, figures, captions, and citations
+- 📄 **Full document support**: Handles chapters, sections, subsections, figures, captions, and citations
 - 🧮 **Multiple equation environments**: Support for `equation`, `align`, `gather`, `multline`, and inline equations
 - 📝 **Text formatting**: Preserves subscripts, superscripts, bold, italic, and other text formatting
-- 🏷️ **Figure captions**: Extracts figure captions and labels while converting inline equations within them
-- 💬 **Citation preservation**: Keeps citation labels in square brackets (e.g., `[...]`)
+- 🏷️ **Figure captions**: Extracts figure captions and labels (wrapped in brackets) while converting inline equations within them
+- 🔢 **Equation labels**: Preserves equation labels below display equations
+- 🔗 **Reference preservation**: Keeps all reference labels (figures, equations, sections) in square brackets
+- 📋 **List support**: Converts `itemize` (bullets) and `enumerate` (numbered) environments to proper Word lists
+- � **Advanced LaTeX handling**: Supports `\texorpdfstring`, `\resizebox`, and escaped characters (`\%`)
+- �💬 **Citation preservation**: Keeps citation labels in square brackets (e.g., `[author2023]`)
 
 ## How It Works
 
@@ -83,34 +87,58 @@ python markdown_to_word.py -v path/to/your/file.md
 - `\mathrm{...}`, `\mathbf{...}`, `\mathcal{...}`, `\mathbb{...}`
 
 ### Document Structure
+- `\chapter{...}` - converts to title heading (level 0)
 - `\section{...}`, `\subsection{...}`, `\subsubsection{...}`
-- `\begin{figure}...\end{figure}` - extracts captions and labels
-- `\cite{...}` - preserves citation labels
+- `\begin{figure}...\end{figure}` - extracts captions (wrapped as `[Caption: ...]`) and labels
+- `\begin{itemize}...\item...\end{itemize}` - creates bulleted lists
+- `\begin{enumerate}...\item...\end{enumerate}` - creates numbered lists
+- `\cite{...}` - preserves citation labels as `[label]`
+- `\ref{...}` - preserves references as `[label]`
 - `\reffig{...}`, `\refeqn{...}` - converts to "Fig." and "Eq."
 
+### Equation Features
+- Equation labels: `\label{eqn_name}` appears as `[eqn_name]` below equations
+- `\resizebox{...}{...}{$...$}` - automatically strips wrapper and processes equation
+- Inline equations within figure captions are properly converted
+
 ### Special Handling
+- `\texorpdfstring{pdf_version}{simple_version}` - extracts simple version
 - Removes LaTeX comments (`% ...`)
 - Skips preamble (starts from `\begin{document}` or first section)
 - Converts `~` (non-breaking spaces) to regular spaces
+- Converts `\%` to `%`
 - Handles delimiter commands like `\Bigl(`, `\Bigr)`, etc.
 
 ## Example
 
 **Input LaTeX:**
 ```latex
+\chapter{Introduction}
+
 \section{Theory}
 
 The energy is given by Einstein's equation:
-$$E = mc^2$$
+\begin{equation}
+E = mc^2
+\label{eqn_energy}
+\end{equation}
+
+Key properties:
+\begin{itemize}
+    \item Mass-energy equivalence as shown in \ref{eqn_energy}
+    \item Speed of light $c = 3 \times 10^8$ m/s
+\end{itemize}
 
 We define H\textsubscript{2}O concentration as $c$.
 ```
 
 **Output Word document:**
+- Chapter heading: "Introduction" (title style)
 - Section heading: "Theory"
-- Paragraph with the text and native Word equation for $E = mc^2$
+- Display equation for $E = mc^2$ with label `[eqn_energy]` below it
+- Bulleted list with two items, including inline equation and reference
 - Subscript properly formatted in "H₂O"
-- Inline equation rendered as Word equation
+- All equations rendered as native Word equations
 
 ## Acknowledgments
 
