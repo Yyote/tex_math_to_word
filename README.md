@@ -2,9 +2,12 @@
 
 Convert LaTeX `.tex` and Markdown `.md` files to Microsoft Word documents (`.docx`) with **native Word equations**! This tool automatically transforms embedded LaTeX equations into OMML (Office Math Markup Language) format for proper rendering in Microsoft Word.
 
+Also includes a BibTeX (`.bib`) to Word converter for generating formatted bibliography documents.
+
 ## Features
 
 - 📄 **Multiple input formats**: Convert both LaTeX (`.tex`) and Markdown (`.md`) files
+- 📚 **Bibliography conversion**: Convert BibTeX (`.bib`) files to formatted Word documents
 - ✨ **Automatic equation conversion**: LaTeX equations → native Word equations (OMML)
 - 📄 **Full document support**: Handles chapters, sections, subsections, figures, captions, and citations
 - 🧮 **Multiple equation environments**: Support for `equation`, `align`, `gather`, `multline`, and inline equations
@@ -66,6 +69,17 @@ python latex_to_word.py path/to/your/file.tex
 python markdown_to_word.py path/to/your/file.md
 ```
 
+### BibTeX files
+```bash
+python latex_bib_to_word.py path/to/your/references.bib
+```
+
+Or simply run without arguments to enter the file path interactively:
+```bash
+python latex_bib_to_word.py
+# Then enter: path/to/your/references.bib
+```
+
 ### Verbose output
 ```bash
 python latex_to_word.py -v path/to/your/file.tex
@@ -76,6 +90,7 @@ python markdown_to_word.py -v path/to/your/file.md
 - Both **absolute and relative paths** are supported for input files
 - The converted Word document will be saved in the **current working directory** with the same filename (e.g., `file.docx`)
 - Example: `python latex_to_word.py ~/Documents/paper.tex` creates `paper.docx` in the current folder
+- For BibTeX files: `python latex_bib_to_word.py sample.bib` creates `sample.docx` with formatted references
 
 ## Supported LaTeX Features
 
@@ -172,4 +187,35 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 - Python 3.7+
 - python-docx
+- bibtexparser (for BibTeX conversion)
 - texmath (Haskell executable)
+
+## BibTeX to Word Converter
+
+The `latex_bib_to_word.py` script converts BibTeX bibliography files to formatted Word documents. Each reference appears with its citation key as a label followed by the formatted reference content.
+
+### Supported BibTeX Entry Types
+- `@article` - Journal articles
+- `@inproceedings` / `@conference` - Conference papers
+- `@book` - Books
+
+### Reference Format
+Each reference is formatted as:
+```
+[citation_key] Author(s), "Title", Journal/Conference, vol. X, no. Y, pp. Z, Month Year, doi: XX.XXXX/XXXXX
+```
+
+### Example Input (BibTeX):
+```bibtex
+@article{Einstein1905,
+  author = {A. Einstein},
+  title = {On the electrodynamics of moving bodies},
+  journal = {Annalen der Physik},
+  volume = {17},
+  pages = {891-921},
+  year = {1905}
+}
+```
+
+### Example Output (Word):
+**[Einstein1905]** A. Einstein, "On the electrodynamics of moving bodies", Annalen der Physik, vol. 17, pp. 891-921, 1905.
