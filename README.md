@@ -16,8 +16,9 @@ Also includes a BibTeX (`.bib`) to Word converter for generating formatted bibli
 - 🔢 **Equation labels**: Preserves equation labels below display equations
 - 🔗 **Reference preservation**: Keeps all reference labels (figures, equations, sections) in square brackets
 - 📋 **List support**: Converts `itemize` (bullets) and `enumerate` (numbered) environments to proper Word lists
-- � **Advanced LaTeX handling**: Supports `\texorpdfstring`, `\resizebox`, and escaped characters (`\%`)
-- �💬 **Citation preservation**: Keeps citation labels in square brackets (e.g., `[author2023]`)
+- 📊 **Table conversion**: Supports `tabular` and `tabularx` environments with `\multicolumn` and `\multirow` support, including inline equations in cells
+- 🎨 **Advanced LaTeX handling**: Supports `\texorpdfstring`, `\resizebox`, and escaped characters (`\%`)
+- � **Citation preservation**: Keeps citation labels in square brackets (e.g., `[author2023]`)
 
 ## How It Works
 
@@ -117,6 +118,16 @@ python markdown_to_word.py -v path/to/your/file.md
 - `\ref{...}` - preserves references as `[label]`
 - `\reffig{...}`, `\refeqn{...}` - converts to "Fig." and "Eq."
 
+### Table Support
+- `\begin{tabular}{...}...\end{tabular}` - converts to Word tables with proper grid formatting
+- `\begin{tabularx}{width}{...}...\end{tabularx}` - supports tabularx with width specifications
+- `\multicolumn{n}{format}{content}` - properly merges cells horizontally (colspan)
+- `\multirow{n}{width}{content}` - preserves multirow structure (content placed in first cell)
+- Inline equations in table cells (e.g., `$T_2$`, `$\pm$`) - converted to native Word equations
+- Table captions and labels - extracted and displayed as `[Caption: ...]` and `[Table: label]`
+- `\hline` and `\cline{...}` - formatting commands are processed (visual borders from table style)
+- **Note**: Support for other table environments (e.g., `longtable`, `array`) coming soon
+
 ### Equation Features
 - Equation labels: `\label{eqn_name}` appears as `[eqn_name]` below equations
 - `\resizebox{...}{...}{$...$}` - automatically strips wrapper and processes equation
@@ -151,6 +162,21 @@ Key properties:
 \end{itemize}
 
 We define H\textsubscript{2}O concentration as $c$.
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline
+        \multicolumn{2}{|c|}{Method} & Result \\
+        \hline
+        Type & $T_2$ (ms) & Value \\
+        \hline
+        A & 74.3 & $\pm$2.3 \\
+        \hline
+    \end{tabular}
+    \caption{Sample data showing $T_2$ relaxation times}
+    \label{tab:results}
+\end{table}
 ```
 
 **Output Word document:**
@@ -159,6 +185,8 @@ We define H\textsubscript{2}O concentration as $c$.
 - Display equation for $E = mc^2$ with label `[eqn_energy]` below it
 - Bulleted list with two items, including inline equation and reference
 - Subscript properly formatted in "H₂O"
+- Table with merged header cells, inline equations ($T_2$, $\pm$) rendered as Word equations
+- Table caption and label displayed as `[Caption: ...]` and `[Table: tab:results]`
 - All equations rendered as native Word equations
 
 ## Acknowledgments

@@ -179,36 +179,57 @@ def extract_latex_equations(content):
     """
     equations = []
     
-    # Helper function to extract label from equation
+    # Helper function to extract label(s) from equation
     def extract_label(eq_text):
-        label_match = re.search(r'\\label\{([^}]*)\}', eq_text)
-        if label_match:
-            label = label_match.group(1)
-            # Remove label from equation text
+        # Find all labels (for multi-line equations like align with multiple labels)
+        label_matches = re.findall(r'\\label\{([^}]*)\}', eq_text)
+        if label_matches:
+            # Join multiple labels with comma
+            label = ', '.join(label_matches)
+            # Remove all labels from equation text
             eq_text = re.sub(r'\\label\{[^}]*\}', '', eq_text).strip()
             return eq_text, label
         return eq_text, None
     
     # First extract equation environments (display)
     # Patterns: \begin{equation*?}...\end{equation*?}, \begin{align*?}...\end{align*?}
-    env_patterns = [
-        (r'\\begin\{equation\*?\}(.*?)\\end\{equation\*?\}', True),
-        (r'\\begin\{align\*?\}(.*?)\\end\{align\*?\}', True),
-        (r'\\begin\{gather\*?\}(.*?)\\end\{gather\*?\}', True),
-        (r'\\begin\{multline\*?\}(.*?)\\end\{multline\*?\}', True),
-        (r'\\begin\{split\}(.*?)\\end\{split\}', True),
+    # For align/gather/etc, we need to keep the environment wrapper for texmath
+    env_patterns_no_wrapper = [
+        (r'\\begin\{equation\*?\}(.*?)\\end\{equation\*?\}', 'equation'),
     ]
     
-    for pattern, is_display in env_patterns:
+    env_patterns_with_wrapper = [
+        (r'\\begin\{(align\*?)\}(.*?)\\end\{\1\}', 'align'),
+        (r'\\begin\{(gather\*?)\}(.*?)\\end\{\1\}', 'gather'),
+        (r'\\begin\{(multline\*?)\}(.*?)\\end\{\1\}', 'multline'),
+        (r'\\begin\{(split)\}(.*?)\\end\{\1\}', 'split'),
+    ]
+    
+    # Extract equations that don't need wrapper (like equation environment)
+    for pattern, env_name in env_patterns_no_wrapper:
         for match in re.finditer(pattern, content, re.DOTALL):
             eq = match.group(1).strip()
             if eq:
                 eq_clean, label = extract_label(eq)
-                equations.append((eq_clean, is_display, label))
+                equations.append((eq_clean, True, label))
+    
+    # Extract equations that need wrapper (like align, gather, etc.)
+    for pattern, env_name in env_patterns_with_wrapper:
+        for match in re.finditer(pattern, content, re.DOTALL):
+            env_type = match.group(1)
+            eq_content = match.group(2).strip()
+            if eq_content:
+                # Extract label before adding wrapper back
+                eq_clean, label = extract_label(eq_content)
+                # Keep the environment wrapper for texmath to parse alignment correctly
+                eq_with_wrapper = f'\\begin{{{env_type}}}\n{eq_clean}\n\\end{{{env_type}}}'
+                equations.append((eq_with_wrapper, True, label))
     
     # Remove equation environments from content for next extraction
     temp_content = content
-    for pattern, _ in env_patterns:
+    for pattern, _ in env_patterns_no_wrapper:
+        temp_content = re.sub(pattern, '', temp_content, flags=re.DOTALL)
+    for pattern, _ in env_patterns_with_wrapper:
         temp_content = re.sub(pattern, '', temp_content, flags=re.DOTALL)
     
     # Extract display equations ($$...$$)
@@ -443,6 +464,85 @@ def process_latex_structure(content):
         flags=re.DOTALL
     )
     
+    # Handle table environments - extract table content and captions
+    def extract_table_info(match):
+        table_content = match.group(1)
+        
+        # Extract caption
+        caption_match = re.search(r'\\caption\{', table_content)
+        caption_text = ""
+        if caption_match:
+            start_pos = caption_match.end()
+            brace_count = 1
+            pos = start_pos
+            while pos < len(table_content) and brace_count > 0:
+                if table_content[pos] == '{' and (pos == 0 or table_content[pos-1] != '\\'):
+                    brace_count += 1
+                elif table_content[pos] == '}' and (pos == 0 or table_content[pos-1] != '\\'):
+                    brace_count -= 1
+                pos += 1
+            if brace_count == 0:
+                caption_text = table_content[start_pos:pos-1]
+        
+        # Extract label
+        label = re.search(r'\\label\{([^}]*)\}', table_content)
+        
+        # Extract tabular/tabularx content with proper brace counting
+        tabular_start = re.search(r'\\begin\{(tabular[x]?)\}', table_content)
+        table_data = None
+        
+        if tabular_start:
+            env_name = tabular_start.group(1)
+            pos = tabular_start.end()
+            
+            # For tabularx, skip two arguments: {width}{column_spec}
+            # For tabular, skip one argument: {column_spec}
+            num_args_to_skip = 2 if env_name == 'tabularx' else 1
+            
+            for _ in range(num_args_to_skip):
+                if pos < len(table_content) and table_content[pos] == '{':
+                    brace_count = 1
+                    pos += 1
+                    while pos < len(table_content) and brace_count > 0:
+                        if table_content[pos] == '{' and (pos == 0 or table_content[pos-1] != '\\'):
+                            brace_count += 1
+                        elif table_content[pos] == '}' and (pos == 0 or table_content[pos-1] != '\\'):
+                            brace_count -= 1
+                        pos += 1
+            
+            # Now extract content until \end{tabular}
+            start_pos = pos
+            end_pattern = f'\\end{{{env_name}}}'
+            end_pos = table_content.find(end_pattern, start_pos)
+            
+            if end_pos != -1:
+                table_data = table_content[start_pos:end_pos].strip()
+        
+        output = []
+        if label:
+            output.append(f"[Table: {label.group(1)}]")
+        if caption_text:
+            output.append(f"[Caption: {caption_text}]")
+        
+        if table_data:
+            # Mark the table content for processing
+            output.append(f"__TABLE_START__\n{table_data}\n__TABLE_END__")
+        else:
+            output.append('[Table content could not be extracted]')
+        
+        if output:
+            return '\n' + '\n'.join(output) + '\n'
+        else:
+            return '[Table omitted - not supported in conversion]\n'
+    
+    # Handle table environments
+    content = re.sub(
+        r'\\begin\{table\*?\}(.*?)\\end\{table\*?\}',
+        extract_table_info,
+        content,
+        flags=re.DOTALL
+    )
+    
     # Handle itemize environments - convert to marked list items
     def process_itemize(match):
         items_content = match.group(1)
@@ -518,8 +618,13 @@ def process_latex_structure(content):
     # Replace LaTeX non-breaking space ~ with regular space
     content = re.sub(r'~', ' ', content)
     
-    # Handle line breaks
-    content = re.sub(r'\\\\', '\n', content)
+    # Handle line breaks (but protect table content)
+    # Split by table markers and only process non-table parts
+    parts = re.split(r'(__TABLE_START__.*?__TABLE_END__)', content, flags=re.DOTALL)
+    for i in range(len(parts)):
+        if not parts[i].startswith('__TABLE_START__'):
+            parts[i] = re.sub(r'\\\\', '\n', parts[i])
+    content = ''.join(parts)
     
     # Replace escaped percentage signs \% with %
     content = re.sub(r'\\%', '%', content)
@@ -568,6 +673,137 @@ def add_formatted_text(paragraph, text):
             if part:
                 run = paragraph.add_run(part)
                 run.font.superscript = True
+
+
+def parse_latex_table(table_text):
+    """
+    Parse LaTeX table content and return a list of rows with proper multicolumn handling.
+    
+    Args:
+        table_text (str): Content between \\begin{tabular} and \\end{tabular}
+    
+    Returns:
+        list: List of rows, where each row is a list of (content, colspan) tuples
+    """
+    # Remove \hline, \cline, and other formatting commands
+    table_text = re.sub(r'\\hline', '', table_text)
+    table_text = re.sub(r'\\cline\{[^}]*\}', '', table_text)
+    table_text = re.sub(r'\\centering', '', table_text)
+    
+    # Split by \\ to get rows (but not \\\\)
+    rows = re.split(r'\\\\(?!\\)', table_text)
+    
+    table_data = []
+    for row in rows:
+        row = row.strip()
+        if not row:
+            continue
+        
+        # Helper function to extract content from braces
+        def extract_braced_content(text, start_pos):
+            """Extract content within braces starting at start_pos (which should be at '{')"""
+            if start_pos >= len(text) or text[start_pos] != '{':
+                return "", start_pos
+            
+            content = ""
+            pos = start_pos + 1
+            brace_count = 1
+            
+            while pos < len(text) and brace_count > 0:
+                if text[pos] == '\\' and pos + 1 < len(text):
+                    content += text[pos:pos+2]
+                    pos += 2
+                elif text[pos] == '{':
+                    brace_count += 1
+                    content += text[pos]
+                    pos += 1
+                elif text[pos] == '}':
+                    brace_count -= 1
+                    if brace_count > 0:
+                        content += text[pos]
+                    pos += 1
+                else:
+                    content += text[pos]
+                    pos += 1
+            
+            return content.strip(), pos
+        
+        # Parse cells with multicolumn support
+        cells = []
+        i = 0
+        current_cell = ""
+        brace_count = 0
+        
+        while i < len(row):
+            # Check for \multicolumn{n}{format}{content}
+            if row[i:].startswith('\\multicolumn'):
+                i += 12
+                # Skip whitespace
+                while i < len(row) and row[i] in ' \t':
+                    i += 1
+                
+                # Extract colspan (first argument)
+                colspan_str, i = extract_braced_content(row, i)
+                colspan = int(colspan_str) if colspan_str.isdigit() else 1
+                
+                # Skip format (second argument)
+                _, i = extract_braced_content(row, i)
+                
+                # Extract content (third argument)
+                content, i = extract_braced_content(row, i)
+                
+                cells.append((content, colspan))
+                continue
+            
+            # Check for \multirow{n}{width}{content}
+            elif row[i:].startswith('\\multirow'):
+                i += 9
+                # Skip whitespace
+                while i < len(row) and row[i] in ' \t':
+                    i += 1
+                
+                # Skip first two arguments
+                _, i = extract_braced_content(row, i)
+                _, i = extract_braced_content(row, i)
+                
+                # Extract content (third argument)
+                content, i = extract_braced_content(row, i)
+                
+                cells.append((content, 1))
+                continue
+            
+            # Check for & separator
+            elif row[i] == '&' and brace_count == 0:
+                if current_cell.strip():
+                    cells.append((current_cell.strip(), 1))
+                current_cell = ""
+                i += 1
+                continue
+            
+            # Track braces for non-command content
+            elif row[i] == '\\' and i + 1 < len(row):
+                current_cell += row[i:i+2]
+                i += 2
+            elif row[i] == '{':
+                brace_count += 1
+                current_cell += row[i]
+                i += 1
+            elif row[i] == '}':
+                brace_count -= 1
+                current_cell += row[i]
+                i += 1
+            else:
+                current_cell += row[i]
+                i += 1
+        
+        # Add the last cell
+        if current_cell.strip():
+            cells.append((current_cell.strip(), 1))
+        
+        if cells:
+            table_data.append(cells)
+    
+    return table_data
 
 
 def add_paragraph_with_equations(doc, text, inline_eqs, inline_eq_index, verbose=False):
@@ -700,9 +936,118 @@ def create_word_doc_from_latex(latex_content, omml_equations_data, output_path="
     lines = processed_content.split('\n')
     
     current_paragraph = None
+    in_table = False
+    table_content = []
     
     for line in lines:
         line = line.rstrip()
+        
+        # Handle table markers
+        if line == '__TABLE_START__':
+            in_table = True
+            table_content = []
+            current_paragraph = None
+            continue
+        elif line == '__TABLE_END__':
+            in_table = False
+            if table_content:
+                # Parse and create table
+                joined_content = '\n'.join(table_content)
+                table_rows = parse_latex_table(joined_content)
+                if table_rows:
+                    # Calculate actual number of columns (accounting for colspan)
+                    max_cols = max(sum(colspan for _, colspan in row) for row in table_rows)
+                    
+                    # Create Word table
+                    word_table = doc.add_table(rows=len(table_rows), cols=max_cols)
+                    word_table.style = 'Table Grid'
+                    
+                    # Fill in the table
+                    for i, row_data in enumerate(table_rows):
+                        col_index = 0
+                        for cell_text, colspan in row_data:
+                            if col_index < max_cols:
+                                cell = word_table.rows[i].cells[col_index]
+                                
+                                # Merge cells if colspan > 1
+                                if colspan > 1 and col_index + colspan <= max_cols:
+                                    merge_cell = word_table.rows[i].cells[col_index + colspan - 1]
+                                    cell.merge(merge_cell)
+                                
+                                # Clear the cell first
+                                cell.text = ''
+                                paragraph = cell.paragraphs[0]
+                                
+                                # Process cell text with inline equations
+                                # Find all inline math expressions
+                                inline_math_pattern = r'\$([^\$]+)\$'
+                                last_end = 0
+                                
+                                for match in re.finditer(inline_math_pattern, cell_text):
+                                    # Add text before the equation
+                                    if match.start() > last_end:
+                                        text_before = cell_text[last_end:match.start()]
+                                        # Clean LaTeX commands
+                                        text_before = re.sub(r'\\textbf\{([^}]*)\}', r'\1', text_before)
+                                        text_before = re.sub(r'\\pm', '±', text_before)
+                                        paragraph.add_run(text_before)
+                                    
+                                    # Convert and add the equation
+                                    latex_expr = match.group(1)
+                                    omml = latex_to_omml(latex_expr)
+                                    if omml:
+                                        try:
+                                            # For inline equations, extract just the <m:oMath> part
+                                            if '<m:oMathPara>' in omml:
+                                                # Extract the inner <m:oMath> from oMathPara
+                                                start = omml.find('<m:oMath>')
+                                                end = omml.find('</m:oMath>') + len('</m:oMath>')
+                                                if start != -1 and end > start:
+                                                    omml_inner = omml[start:end]
+                                                else:
+                                                    omml_inner = omml
+                                            else:
+                                                omml_inner = omml
+                                            
+                                            # Add namespace if needed
+                                            if 'xmlns:m' not in omml_inner:
+                                                omml_inner = omml_inner.replace(
+                                                    '<m:oMath>',
+                                                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                                                )
+                                            
+                                            # Create a run and insert OMML
+                                            run = paragraph.add_run()
+                                            omml_element = parse_xml(omml_inner)
+                                            run._element.append(omml_element)
+                                        except Exception as e:
+                                            # Fallback to plain text
+                                            paragraph.add_run(latex_expr)
+                                            if verbose:
+                                                print(f"  ✗ Failed to add table cell equation: {e}")
+                                    else:
+                                        # Fallback to plain text
+                                        paragraph.add_run(latex_expr)
+                                    
+                                    last_end = match.end()
+                                
+                                # Add remaining text after last equation
+                                if last_end < len(cell_text):
+                                    text_after = cell_text[last_end:]
+                                    # Clean LaTeX commands
+                                    text_after = re.sub(r'\\textbf\{([^}]*)\}', r'\1', text_after)
+                                    text_after = re.sub(r'\\pm', '±', text_after)
+                                    paragraph.add_run(text_after)
+                                
+                                col_index += colspan
+                    
+                    if verbose:
+                        print(f"✓ Added table with {len(table_rows)} rows and {max_cols} columns")
+            table_content = []
+            continue
+        elif in_table:
+            table_content.append(line)
+            continue
         
         if not line:
             if current_paragraph is None or not current_paragraph.text.strip():
@@ -907,10 +1252,11 @@ def latex_to_word(latex_file, output_file=None, verbose=True):
     
     if verbose:
         print(f"\nFound {len(equations_from_tex)} LaTeX equations\n")
-        for i, (eq, is_display) in enumerate(equations_from_tex, 1):
+        for i, (eq, is_display, label) in enumerate(equations_from_tex, 1):
             mode = "DISPLAY" if is_display else "INLINE"
             eq_preview = eq.replace('\n', ' ')[:60]
-            print(f"{i}. [{mode}] {eq_preview}{'...' if len(eq) > 60 else ''}")
+            label_str = f" [Label: {label}]" if label else ""
+            print(f"{i}. [{mode}]{label_str} {eq_preview}{'...' if len(eq) > 60 else ''}")
     
     # Convert all extracted equations to OMML
     tex_omml_equations = convert_equations_to_omml(equations_from_tex, verbose=verbose)
