@@ -4,6 +4,13 @@ Convert LaTeX `.tex` and Markdown `.md` files to Microsoft Word documents (`.doc
 
 Also includes a BibTeX (`.bib`) to Word converter for generating formatted bibliography documents.
 
+### Briefing about installing on ubuntu
+
+1. Install brew
+2. Install texmath
+3. Pip install requirements 
+4. Done
+
 ## Features
 
 - 📄 **Multiple input formats**: Convert both LaTeX (`.tex`) and Markdown (`.md`) files
